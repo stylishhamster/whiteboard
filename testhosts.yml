@@ -1,0 +1,15 @@
+#users stores at vars file
+debian:
+  hosts:
+    debmin:
+      ansible_host: 10.8.0.2
+      
+centos:
+  hosts:        
+    centoslocal:
+      ansible_host: 10.8.0.3
+      
+linuxservers:
+  children:
+    debian:
+    centos:

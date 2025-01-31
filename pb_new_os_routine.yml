@@ -1,0 +1,44 @@
+---
+ - name: New servers routine after install
+   hosts: localservers
+   become: true
+   become_method: su
+
+   tasks:
+     - name: Update yum package list
+       yum:
+         update_cache: yes
+       when: ansible_facts['os_family'] == 'RedHat'
+       become: true
+       become_method: su
+
+     - name: Update repo file
+       copy:
+         src: ./files/sources.list
+         dest: /etc/apt/
+       when: ansible_facts['os_family'] == 'Debian'
+
+     - name: Update apt package list
+       apt:
+         update_cache: yes
+       when: ansible_facts['os_family'] == 'Debian'
+
+     - name: Update ntp configuration
+       copy:
+         src: ./files/timesyncd.conf
+         dest: /etc/systemd/timesyncd.conf
+       when: ansible_facts['os_family'] == 'Debian'
+       notify:
+        - Restart ntp daemon
+
+     - name: Add date to history
+       shell:
+         cmd: 'HISTTIMEFORMAT="%d/%m/%y %T  "; export HISTTIMEFORMAT'
+
+   handlers:
+    - name: Restart ntp daemon
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        daemon-reload: true
+        enabled: true
+        state: restarted

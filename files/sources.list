@@ -1,0 +1,7 @@
+deb http://mirror.truenetwork.ru/debian/ bookworm main non-free-firmware
+deb-src http://mirror.truenetwork.ru/debian/ bookworm main non-free-firmware
+
+# bookworm-updates, to get updates before a point release is made;
+# see https://www.debian.org/doc/manuals/debian-reference/ch02.en.html#_updates_and_backports
+deb http://mirror.truenetwork.ru/debian/ bookworm-updates main non-free-firmware
+deb-src http://mirror.truenetwork.ru/debian/ bookworm-updates main non-free-firmware

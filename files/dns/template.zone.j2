@@ -1,0 +1,12 @@
+$TTL 14400	; 4 hours
+{{ dns_domain }}.	IN	SOA	dns.{{ dns_domain }}. admin.{{ dns_domain }}. (
+				1          ; serial
+				604800     ; refresh (1 week)
+				86400      ; retry (1 day)
+				2419200    ; expire (4 weeks)
+				604800     ; minimum (1 week)
+				)
+		IN	NS	dns.{{ dns_domain }}.
+@		IN	A	10.8.0.2
+dns		IN	A	10.8.0.2
+gw		IN	A	10.8.0.1

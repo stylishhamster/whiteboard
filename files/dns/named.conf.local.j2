@@ -1,0 +1,35 @@
+//
+// Do any local configuration here
+//
+
+// Consider adding the 1918 zones here, if they are not used in your
+// organization
+//include "/etc/bind/zones.rfc1918";
+include "/etc/bind/rndc.key";
+
+options {
+	auth-nxdomain no;
+	directory "/var/cache/bind";
+
+	listen-on {
+		{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.prefix }};
+	};
+
+	forwarders {
+		77.88.8.8;
+		8.8.8.8;
+	};
+};
+
+zone "{{ dns_domain }}" IN {
+	type master;
+	file "/var/lib/bind/master-zones/{{ dns_domain }}.zone";
+	allow-update { key rndc-key; };
+};
+
+zone "0.8.10.in-addr.arpa" IN {
+	type master;
+	file "/var/lib/bind/master-zones/0.8.10.zone";
+	allow-update { key rndc-key; };
+
+};

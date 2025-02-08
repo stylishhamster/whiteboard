@@ -1,0 +1,42 @@
+# /etc/ntpsec/ntp.conf, configuration for ntpd; see ntp.conf(5) for help
+# This file controlled by configuration management, changes may be discarded
+
+driftfile /var/lib/ntpsec/ntp.drift
+leapfile /usr/share/zoneinfo/leap-seconds.list
+
+# You must create /var/log/ntpsec (owned by ntpsec:ntpsec) to enable logging.
+statsdir /var/log/ntpsec/
+statistics loopstats peerstats clockstats
+filegen loopstats file loopstats type day enable
+filegen peerstats file peerstats type day enable
+filegen clockstats file clockstats type day enable
+
+# This should be maxclock 7, but the pool entries count towards maxclock.
+tos maxclock 11
+
+# Comment this out if you have a refclock and want it to be able to discipline
+# the clock by itself (e.g. if the system is not connected to the network).
+tos minclock 4 minsane 3
+
+# Specify one or more NTP servers.
+
+# pool.ntp.org maps to about 1000 low-stratum NTP servers.  Your server will
+# pick a different set every time it starts up.  Please consider joining the
+# pool: <https://www.pool.ntp.org/join.html>
+pool {{ primary_ntp_source }} iburst
+server 127.127.1.0
+#pool {{ fallback_ntp_source }} iburst
+
+# Access control configuration; see /usr/share/doc/ntpsec-doc/html/accopt.html
+# for details.
+#
+# Note that "restrict" applies to both servers and clients, so a configuration
+# that might be intended to block requests from certain clients could also end
+# up blocking replies from your own upstream servers.
+
+# By default, exchange time with everybody, but don't allow configuration.
+restrict default kod nomodify nopeer noquery limited
+
+# Local users may interrogate the ntp server more closely.
+restrict 127.0.0.1
+restrict ::1

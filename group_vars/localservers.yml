@@ -1,2 +1,6 @@
 ---
 ansible_user: user
+primary_ntp_source: ntp.msk-ix.ru
+fallback_ntp_source: 0.debian.pool.ntp.org
+local_ntp_source: 'ntp.myhomelab'
+dns_domain: 'myhomelab'

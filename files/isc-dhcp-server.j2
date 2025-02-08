@@ -1,0 +1,6 @@
+# Defaults for isc-dhcp-server (sourced by /etc/init.d/isc-dhcp-server)
+
+# On what interfaces should the DHCP server (dhcpd) serve DHCP requests?
+#	Separate multiple interfaces with spaces, e.g. "eth0 eth1".
+INTERFACESv4="{{ ansible_default_ipv4.interface }}"
+#INTERFACESv6=""

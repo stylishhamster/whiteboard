@@ -5,40 +5,238 @@
    become_method: su
 
    tasks:
-     - name: Update yum package list
-       yum:
-         update_cache: yes
-       when: ansible_facts['os_family'] == 'RedHat'
-       become: true
-       become_method: su
-
-     - name: Update repo file
-       copy:
-         src: ./files/sources.list
-         dest: /etc/apt/
+#     - name: Update yum package list
+#       yum:
+#         update_cache: yes
+#       when: ansible_facts['os_family'] == 'RedHat'
+#       become: true
+#       become_method: su
+     - name: Perform some cool staff on Debian-based
        when: ansible_facts['os_family'] == 'Debian'
+       block:
+         - name: Update repo file
+           copy:
+             src: ./files/sources.list
+             dest: /etc/apt/
+           tags: update
 
-     - name: Update apt package list
-       apt:
-         update_cache: yes
-       when: ansible_facts['os_family'] == 'Debian'
+         - name: Update apt package list
+           apt:
+             update_cache: yes
+           tags: update
 
-     - name: Update ntp configuration
-       copy:
-         src: ./files/timesyncd.conf
-         dest: /etc/systemd/timesyncd.conf
-       when: ansible_facts['os_family'] == 'Debian'
-       notify:
-        - Restart ntp daemon
+         - name: Update ntp configuration
+           copy:
+             src: ./files/timesyncd.conf
+             dest: /etc/systemd/timesyncd.conf
+           notify:
+             - Restart systemd-ntp daemon
 
      - name: Add date to history
-       shell:
-         cmd: 'HISTTIMEFORMAT="%d/%m/%y %T  "; export HISTTIMEFORMAT'
+       copy:
+         src: ./files/add_at_startup.sh
+         dest: /etc/profile.d/
+         mode: '644'
+       tags: debug
 
+     - name: Install nginx
+       when: target is search("web")
+       block:
+         - name: Install nginx on Debian
+           apt:
+             name: nginx
+           when: ansible_facts['os_family'] == 'Debian'
+         - name: Install nginx on Centos
+           apt:
+             name: nginx
+           when: ansible_facts['os_family'] == 'RedHat'
+         - name: Creating directory for content
+           file:
+             path: /var/www/testme
+             state: directory
+             mode: '0755'
+         - name: Copy content
+           copy:
+             src: ./files/site_testme/index.html
+             dest: /var/www/testme/index.html
+             mode: '0755'
+     - name: NTP Server Setup
+       when: target is search("-ntp-")
+       block:
+         - name: Install NTP Server
+           apt:
+             name: ntp
+            # state: present
+#         - name: Add firewall rules
+#           iptables:
+#             chain: INPUT
+#             protocol: udp
+#             destination_port: '123'
+#             jump: ACCEPT
+         - name: Creating log folder
+           file:
+             path: /var/log/ntpsec
+             state: directory
+             mode: '0755'
+             group: ntpsec
+             owner: ntpsec
+         - name: Copy NTP configuration
+           template:
+             src: ./files/ntp.conf.j2
+             dest: /etc/ntpsec/ntp.conf
+             mode: '0644'   
+           notify: 
+             - Restart ntp server daemon
+             - Check time synq
+             - Output time synq
+         
+#         - name: Out time synq
+#           debug: 
+#             var: "End at {{ resultntp.end }}, delta {{ resultntp.delta }} {{ resultntp.stdout }}"
+       tags: sdebug 
+     - name: DNS Server Setup
+       when: target is search("-dns_server-")
+       block:
+         - name: Gather the package facts
+           ansible.builtin.package_facts:
+             manager: auto
+             
+         - name: Remove wrong version pkg  
+           apt: "name={{ item }} state=absent"
+           loop: 
+            - bind9-utils
+            - bind9-libs
+           when: "'bind9' not in ansible_facts.packages"
+           
+         - name: Install Bind9  
+           apt:
+             name: bind9
+             state: present
+#         - name: Add firewall rules
+#           iptables:
+#             chain: INPUT
+#             protocol: udp
+#             destination_port: '123'
+#             jump: ACCEPT
+         - name: Creating master-zone folder
+           file:
+             path: /var/lib/bind/master-zones
+             state: directory
+             group: bind
+             mode: '0775'
+             
+         - name: Copy static configuration files
+           copy:
+             src : "{{ item.src }}"
+             dest: /etc/bind/
+           loop:
+             - src: ./files/dns/named.conf
+
+         - name: Copy dynamic configuration files
+           template:
+             src: "{{ item.src }}"
+             dest: "{{ item.dest }}"
+           loop: 
+             - src: ./files/dns/named.conf.local.j2
+               dest: /etc/bind/named.conf.local
+             - src: ./files/dns/template.zone.j2
+               dest: "/var/lib/bind/master-zones/{{ dns_domain }}.zone"
+             - src: ./files/dns/0.8.10.zone
+               dest: /var/lib/bind/master-zones/0.8.10.zone
+             - src: ./files/dns/resolv.conf.j2
+               dest: /etc/resolv.conf
+           notify: Restart DNS server daemon
+           
+         - name: Check DNS configuration
+           command: 'named-checkconf -z'
+           register: resultdns
+           
+         - name: Out result
+           debug: 
+             msg: "{{ resultdns }}"
+       tags: sdebug 
+
+     - name: DHCP Server Setup
+       when: target is search("-dhcp-")
+       block:
+         - name: Gather the package facts
+           ansible.builtin.package_facts:
+             manager: auto
+           
+         - name: Install DHCP Server  
+           apt:
+             name: isc-dhcp-server
+             state: present
+             
+#         - name: Add firewall rules
+#           iptables:
+#             chain: INPUT
+#             protocol: udp
+#             destination_port: '123'
+#             jump: ACCEPT
+         - name: Copy files if DNS-server is installed
+           when: "'bind9' in ansible_facts.packages"
+           block:
+             - name: Create dir for dynamic update key
+               file:
+                 path: /etc/dhcp/ddns-keys
+                 state: directory
+             
+             - name: Copy configuration file 2
+               template:
+                 src: ./files/dhcpd_w_dns.conf.j2
+                 dest: /etc/dhcp/dhcpd.conf
+                   
+             - name: Copy DNS key for dynamic update
+               command: "cp /etc/bind/rndc.key /etc/dhcp/ddns-keys/"
+         
+         - name: Copy files if DNS-server is not installed
+           when: "'bind9' not in ansible_facts.packages"
+           template:
+             src: ./files/dhcpd_wo_dns.conf.j2
+             dest: /etc/dhcp/dhcpd.conf
+             
+         - name: Copy common DHCP configuration file
+           template:
+             src: ./files/isc-dhcp-server.j2
+             dest: /etc/default/isc-dhcp-server
+           notify: Restart DHCP server daemon
+                             
+       tags: sdebug 
+       
    handlers:
-    - name: Restart ntp daemon
+    - name: Restart systemd-ntp daemon
       ansible.builtin.systemd:
         name: systemd-timesyncd
+        daemon-reload: true
+        enabled: true
+        state: restarted
+        
+    - name: Restart ntp server daemon
+      ansible.builtin.systemd:
+        name: ntp
+        #daemon-reload: true
+        enabled: true
+        state: restarted
+        
+    - name: Check time synq
+      command: 'ntpq -p'
+      register: chtimeresult
+      
+    - name: Output time synq
+      debug: 
+        msg: "{{ chtimeresult }}"   
+        
+    - name: Restart DNS server daemon
+      ansible.builtin.systemd:
+        name: named
+        daemon-reload: true
+        enabled: true
+        state: restarted
+
+    - name: Restart DHCP server daemon
+      ansible.builtin.systemd:
+        name: isc-dhcp-server
         daemon-reload: true
         enabled: true
         state: restarted

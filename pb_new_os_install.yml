@@ -26,8 +26,8 @@
            tags: update
 
          - name: Update ntp configuration
-           copy:
-             src: ./files/timesyncd.conf
+           template:
+             src: ./files/timesyncd.conf.j2
              dest: /etc/systemd/timesyncd.conf
            notify:
              - Restart systemd-ntp daemon
@@ -39,15 +39,109 @@
          mode: '644'
        tags: debug
 
+     - name: Install OpenVPN Server in Docker Container
+       when: target is search("-docker_ovpn-")
+       block:
+         - name: Install Docker.io
+           apt:
+             name: docker.io
+           when: ansible_facts['os_family'] == 'Debian'
+           
+         - name: Copy src for OVPN Docker image
+           copy:
+             src: files/docker-openvpn
+             dest: /home/{{ ansible_user }}
+ 
+         - name: Create volume for OVPN container
+           command: "/usr/bin/docker volume create {{ docker_ovpn_volume }}"
+ 
+         - name: Check volume for OVPN container
+           command: '/usr/bin/docker volume inspect --format \{\{.Mountpoint\}\} {{ docker_ovpn_volume }}'
+           register: d_v_created
+           
+         - name: Volume creation result
+           debug:
+             msg: "Volume created at {{ d_v_created.stdout }}"
+             
+         - name: Create image for OVPN container
+           shell: "cd /home/{{ ansible_user }}/docker-openvpn && /usr/bin/docker build . -t ovpn-image"  
+           
+         - name: Create OVPN container conf
+           command: '/usr/bin/docker run -v {{ docker_ovpn_volume }}:/etc/openvpn --rm ovpn-image ovpn_genconfig -u {{ ansible_default_ipv4.address }}:1111 -s 192.168.16.0/24 -m 1450 -N'
+         
+         - name: Create to-do list 
+           shell: >
+             echo "You have to do a couple of operations to complete ovpn installation: \n
+             1. Init PKI: \n
+             docker run -v {{ docker_ovpn_volume }}:/etc/openvpn --rm -it ovpn-image ovpn_initpki \n
+             2. Run container: \n
+             docker run -v {{ docker_ovpn_volume }}:/etc/openvpn --name openvpn -d -p 1111:1194/udp --cap-add=NET_ADMIN --memory-swap=200m --memory=200m --cpus=0.5 ovpn-image \n
+             3. Create users: \n 
+             docker run -v {{ docker_ovpn_volume }}:/etc/openvpn --rm -it ovpn-image easyrsa build-client-full CLIENTNAME nopass \n
+             4. Get client config: \n
+             docker run -v {{ docker_ovpn_volume }}:/etc/openvpn --rm ovpn-image ovpn_getclient CLIENTNAME > CLIENTNAME.ovpn"
+             > /root/ovpnto-do.list
+           
+     - name: Install pi-hole in Docker Container
+       when: target is search("-docker_pihole-")
+       block:
+         - name: Install Docker.io
+           apt:
+             name: docker.io
+             state: present
+           when: ansible_facts['os_family'] == 'Debian'
+           
+         - name: Copy src for Docker image pihole
+           synchronize:
+             src: files/docker-pi-hole
+             dest: /home/{{ ansible_user }}
+ 
+         - name: Create volume for pihole container
+           command: "/usr/bin/docker volume create {{ docker_pihole_volume }}"
+ 
+         - name: Check volume for pihole container
+           command: '/usr/bin/docker volume inspect --format \{\{.Mountpoint\}\} {{ docker_pihole_volume }}'
+           register: d_p_created
+           
+         - name: Volume creation result
+           debug:
+             msg: "Volume created at {{ d_p_created.stdout }}"
+             
+         - name: Create image for pihole container
+           shell: "cd /home/{{ ansible_user }}/docker-pi-hole/src && /usr/bin/docker build . -t my:pi-hole" 
+
+         - name: Check if pihole container is running
+           command: '/usr/bin/docker network ls \{\{.Name\}\}'
+           register: d_n_running
+
+         - name: Create network for pihole container
+           command: "/usr/bin/docker network create --subnet=172.18.0.0/30 pi-net"
+           when: pi-net is not search "d_n_running"
+
+         - name: Check if pihole container is running
+           command: '/usr/bin/docker ps -a --format \{\{.Names\}\}'
+           register: d_p_running
+           
+         - name: Stop and remove pihole container
+           shell: '/usr/bin/docker stop pihole && /usr/bin/docker rm pihole'
+           when: pihole is search "d_p_running"
+
+         - name: Create container for pihole container
+           command: '/usr/bin/docker run -d --name pihole -v "{{ d_p_created.stdout }}/etc-pihole:/etc/pihole"
+                    -v "{{ d_p_created.stdout }}/etc-dnsmasq.d:/etc/dnsmasq.d" --dns={{ default_ext_dns }}
+                    --hostname=pi.hole -e FTLCONF_LOCAL_IPV4="127.0.0.1" -e WEBPASSWORD="kekme"
+                    -e PIHOLE_DNS="{{ default_ext_dns }}" --net=pi-net --ip="172.18.0.2" --memory-swap=200m
+                    --memory=200m --cpus=0.5 my:pi-hole'
+           
      - name: Install nginx
-       when: target is search("web")
+       when: target is search("-web-")
        block:
          - name: Install nginx on Debian
            apt:
              name: nginx
            when: ansible_facts['os_family'] == 'Debian'
          - name: Install nginx on Centos
-           apt:
+           yum:
              name: nginx
            when: ansible_facts['os_family'] == 'RedHat'
          - name: Creating directory for content
@@ -90,9 +184,6 @@
              - Check time synq
              - Output time synq
          
-#         - name: Out time synq
-#           debug: 
-#             var: "End at {{ resultntp.end }}, delta {{ resultntp.delta }} {{ resultntp.stdout }}"
        tags: sdebug 
      - name: DNS Server Setup
        when: target is search("-dns_server-")

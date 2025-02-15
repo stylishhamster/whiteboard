@@ -4,3 +4,7 @@ primary_ntp_source: ntp.msk-ix.ru
 fallback_ntp_source: 0.debian.pool.ntp.org
 local_ntp_source: 'ntp.myhomelab'
 dns_domain: 'myhomelab'
+target: '-common-'
+docker_ovpn_volume: ovpn-data-main
+docker_pihole_volume: pi_volume
+default_ext_dns: "77.88.8.8"

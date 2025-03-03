@@ -42,13 +42,18 @@
      - name: Install OpenVPN Server in Docker Container
        when: target is search("-docker_ovpn-")
        block:
+         - name: Update apt package list and install rsync
+           apt: 
+             name: rsync
+             update_cache: yes
+             
          - name: Install Docker.io
            apt:
              name: docker.io
            when: ansible_facts['os_family'] == 'Debian'
            
          - name: Copy src for OVPN Docker image
-           copy:
+           synchronize:
              src: files/docker-openvpn
              dest: /home/{{ ansible_user }}
  
@@ -85,6 +90,11 @@
      - name: Install pi-hole in Docker Container
        when: target is search("-docker_pihole-")
        block:
+         - name: Update apt package list and install rsync
+           apt: 
+             name: rsync
+             update_cache: yes
+             
          - name: Install Docker.io
            apt:
              name: docker.io
@@ -110,13 +120,13 @@
          - name: Create image for pihole container
            shell: "cd /home/{{ ansible_user }}/docker-pi-hole/src && /usr/bin/docker build . -t my:pi-hole" 
 
-         - name: Check if pihole container is running
-           command: '/usr/bin/docker network ls \{\{.Name\}\}'
+         - name: Check if pihole net is exist
+           command: '/usr/bin/docker network ls --format \{\{.Name\}\}'
            register: d_n_running
 
          - name: Create network for pihole container
            command: "/usr/bin/docker network create --subnet=172.18.0.0/30 pi-net"
-           when: pi-net is not search "d_n_running"
+           when: d_n_running is not search("pi-net")
 
          - name: Check if pihole container is running
            command: '/usr/bin/docker ps -a --format \{\{.Names\}\}'
@@ -124,7 +134,7 @@
            
          - name: Stop and remove pihole container
            shell: '/usr/bin/docker stop pihole && /usr/bin/docker rm pihole'
-           when: pihole is search "d_p_running"
+           when: d_p_running is search("pihole")
 
          - name: Create container for pihole container
            command: '/usr/bin/docker run -d --name pihole -v "{{ d_p_created.stdout }}/etc-pihole:/etc/pihole"
@@ -140,20 +150,87 @@
            apt:
              name: nginx
            when: ansible_facts['os_family'] == 'Debian'
+           
          - name: Install nginx on Centos
            yum:
              name: nginx
+             state: present
            when: ansible_facts['os_family'] == 'RedHat'
+           
          - name: Creating directory for content
            file:
              path: /var/www/testme
              state: directory
              mode: '0755'
+             
          - name: Copy content
            copy:
              src: ./files/site_testme/index.html
              dest: /var/www/testme/index.html
              mode: '0755'
+
+         - name: Copy conf file for web
+           template:
+             src: ./files/nginx.conf.j2
+             dest: /etc/nginx/nginx.conf
+             mode: '0755'
+
+         - name: Start nginx service
+           systemd_service:
+             name: nginx
+             state: started
+             daemon_reload: true
+             enabled: true
+             
+         - name: Add iptables rules for nx
+           iptables:
+             chain: INPUT
+             comment: This rules is for access to web server
+             protocol: tcp
+             destination_ports:
+               - "22"
+               - "80"
+               - "443"
+             jump: ACCEPT
+             
+     - name: Install nginx proxy
+       when: target is search("-web_proxy-")
+       block:
+         - name: Install nginx proxy on Debian
+           apt:
+             name: nginx
+           when: ansible_facts['os_family'] == 'Debian'
+           
+         - name: Install nginx proxy on Centos
+           yum:
+             name: nginx
+             state: present
+           when: ansible_facts['os_family'] == 'RedHat'
+           
+         - name: Copy conf file for web-proxy
+           template:
+             src: ./files/nginx_proxy_upstream.conf.j2
+             dest: /etc/nginx/nginx.conf
+             mode: '0755'
+
+         - name: Start nginx proxy service
+           systemd_service:
+             name: nginx
+             state: started
+             daemon_reload: true
+             enabled: true
+             
+         - name: Add iptables rules for nginx proxy
+           iptables:
+             chain: INPUT
+             comment: This rules is for access to web server
+             protocol: tcp
+             destination_ports:
+               - "22"
+               - "80"
+               - "443"
+             jump: ACCEPT
+         
      - name: NTP Server Setup
        when: target is search("-ntp-")
        block:

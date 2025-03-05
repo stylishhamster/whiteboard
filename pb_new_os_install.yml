@@ -54,7 +54,7 @@
            
          - name: Copy src for OVPN Docker image
            synchronize:
-             src: files/docker-openvpn
+             src: files/docker_openvpn
              dest: /home/{{ ansible_user }}
  
          - name: Create volume for OVPN container
@@ -103,7 +103,7 @@
            
          - name: Copy src for Docker image pihole
            synchronize:
-             src: files/docker-pi-hole
+             src: files/docker_pi_hole
              dest: /home/{{ ansible_user }}
  
          - name: Create volume for pihole container

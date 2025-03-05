@@ -1,0 +1,9 @@
+OVPN_DATA="ovpn-data-main"
+docker volume create $OVPN_DATA
+docker build . -t my:dockovpn
+docker run -v $OVPN_DATA:/etc/openvpn --rm my:dockovpn ovpn_genconfig -u 46.8.43.223:64000 -s 192.168.16.0/24 -m 1450 -N
+docker run -v $OVPN_DATA:/etc/openvpn --rm -it my:dockovpn ovpn_initpki
+docker run -v $OVPN_DATA:/etc/openvpn --name openvpn -d -p 64000:1194/udp --cap-add=NET_ADMIN --memory-swap=200m --memory=200m --cpus=0.5 --dns=172.18.0.2 my:dockovpn
+docker run -v $OVPN_DATA:/etc/openvpn --rm -it my:dockovpn easyrsa build-client-full CLIENTNAME nopass
+docker run -v $OVPN_DATA:/etc/openvpn --rm my:dockovpn ovpn_getclient CLIENTNAME > CLIENTNAME.ovpn
+

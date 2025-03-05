@@ -1,0 +1,58 @@
+---
+services:
+  openvpn:
+    container_name: openvpn
+    image: my:dockovpn
+    volumes:
+      - type: bind
+        source: /var/lib/docker/volumes/ovpn-data-main/_data/etc
+        target: /etc/openvpn
+        read_only: yes
+      - type: bind
+        source: /var/lib/docker/volumes/ovpn-data-main/_data/log
+        target: /tmp
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "64000:1194/udp"
+    dns: 172.18.0.2
+    cpus: '0.50'
+    mem_limit: 200m
+    restart: on-failure:5
+    networks:
+      - ovpnbr
+
+  pihole:
+    container_name: pihole
+    image: pi-hole
+    volumes:
+      - type: bind
+        source: /var/lib/docker/volumes/pi_volume/_data/etc-pihole
+        target: /etc/pihole
+      - type: bind
+        source: /var/lib/docker/volumes/pi_volume/_data/etc-dnsmasq.d
+        target: /etc/dnsmasq.d
+    dns: 127.0.0.1
+    cpus: '0.50'
+    mem_limit: 350m
+    restart: unless-stopped
+    networks:
+      - pi-net
+    environment:
+      WEBPASSWORD: SPuyrSVwzIon
+      PIHOLE_DNS_: 77.88.8.8
+      FTLCONF_LOCAL_IPV4: 127.0.0.1
+
+ #   user: root
+networks:
+  ovpnbr:
+    ipam:
+      config:
+        - subnet: 172.19.0.0/29
+  pi-net:
+      external: true
+
+
+#docker run -v ovpn-data-main:/etc/openvpn --name openvpn -d -p 64000:1194/udp --cap-add=NET_ADMIN --memory-swap=200m --memory=200m --cpus=0.5 --restart=unless-stopped my:dockovpn
+# "/var/lib/docker/volumes/pi_volume/_data/etc-pihole:/etc/pihole", "/var/lib/docker/volumes/pi_volume/_data/etc-dnsmasq.d:/etc/dnsmasq.d"
+# "WEBPASSWORD=SPuyrSVwzIon", #"PIHOLE_DNS_=77.88.8.8", 
